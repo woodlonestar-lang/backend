@@ -173,4 +173,44 @@ describe('error-handler', () => {
     const sendArg = (reply.send as any).mock.calls[0]?.[0];
     expect(sendArg.requestId).toBe('req-123');
   });
+
+  it('normalizes Prisma unique constraint targets to field details', () => {
+    const reply = createMockReply();
+    const request = createMockRequest(() => {});
+
+    handleError(
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: ['email', 'tenantId'], modelName: 'User' },
+      }),
+      request,
+      reply,
+    );
+
+    const sendArg = (reply.send as any).mock.calls[0]?.[0];
+    expect(sendArg.error.code).toBe('CONFLICT');
+    expect(sendArg.error.details).toEqual({ fields: ['email', 'tenantId'] });
+  });
+
+  it('normalizes a string unique constraint target and omits absent targets', () => {
+    const request = createMockRequest(() => {});
+    const stringTargetReply = createMockReply();
+    handleError(
+      Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        meta: { target: 'email' },
+      }),
+      request,
+      stringTargetReply,
+    );
+    expect((stringTargetReply.send as any).mock.calls[0]?.[0].error.details).toEqual({ fields: ['email'] });
+
+    const missingTargetReply = createMockReply();
+    handleError(
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      request,
+      missingTargetReply,
+    );
+    expect((missingTargetReply.send as any).mock.calls[0]?.[0].error.details).toBeUndefined();
+  });
 });
