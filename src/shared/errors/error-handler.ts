@@ -31,6 +31,17 @@ function zodToDetails(error: ZodError): unknown {
   return error.issues.map((issue) => ({ path: issue.path.join('.'), message: issue.message }));
 }
 
+function prismaUniqueConstraintDetails(meta?: Record<string, unknown>): { fields: string[] } | undefined {
+  const target = meta?.target;
+  const fields =
+    typeof target === 'string'
+      ? [target]
+      : Array.isArray(target)
+        ? target.filter((field): field is string => typeof field === 'string')
+        : [];
+  return fields.length > 0 ? { fields } : undefined;
+}
+
 /**
  * The single point where every thrown error becomes an HTTP response.
  * Registered via `app.setErrorHandler(...)` in src/app.ts. Nothing else in
@@ -105,7 +116,11 @@ export function handleError(
   if (isPrismaKnownRequestError(error)) {
     if (error.code === 'P2002') {
       const body: ErrorResponseBody = {
-        error: { code: 'CONFLICT', message: 'Resource already exists', details: error.meta },
+        error: {
+          code: 'CONFLICT',
+          message: 'Resource already exists',
+          details: prismaUniqueConstraintDetails(error.meta),
+        },
         requestId,
       };
       void reply.status(409).send(body);
